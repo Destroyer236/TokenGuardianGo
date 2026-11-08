@@ -60,7 +60,12 @@ wails dev
 # 构建单文件 exe
 wails build
 # 产物: build/bin/TokenGuardianGo.exe
+
+# （可选）用 UPX 压缩体积，约 12 MB → 3.6 MB，功能无损
+upx --best --lzma build/bin/TokenGuardianGo.exe
 ```
+
+> 提示：UPX 加壳的 exe 个别杀毒软件可能误报，属已知现象；介意的话跳过压缩步骤即可。
 
 应用图标由 `tools/genicon` 生成（纯 Go 绘制，4× 超采样）：
 
