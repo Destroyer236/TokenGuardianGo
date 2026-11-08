@@ -284,7 +284,7 @@ func TestSyncConfigRoundTrip(t *testing.T) {
 		Username:       "user@example.com",
 		WebDAVPassword: "app-password",
 		SyncPassword:   "sync-pass",
-		RemotePath:     "TokenGuardianGo/sync.enc",
+		RemotePath:     "Authenticator/sync.enc",
 	}
 	if err := SaveSyncConfig(cfgPath, v, cfg); err != nil {
 		t.Fatalf("SaveSyncConfig: %v", err)
@@ -375,7 +375,7 @@ func TestDoSyncEndToEnd(t *testing.T) {
 		Username:       "user",
 		WebDAVPassword: "pass",
 		SyncPassword:   "sync-pass",
-		RemotePath:     "TokenGuardianGo/sync.enc",
+		RemotePath:     "Authenticator/sync.enc",
 	}
 
 	// 两台设备：不同主密码、独立保险库（同步密码是唯一的纽带）

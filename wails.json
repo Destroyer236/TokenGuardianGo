@@ -1,11 +1,11 @@
 {
   "$schema": "https://wails.io/schemas/config.v2.json",
-  "name": "TokenGuardianGo",
-  "outputfilename": "TokenGuardianGo",
+  "name": "Authenticator",
+  "outputfilename": "Authenticator",
   "frontend:install": "",
   "frontend:build": "",
   "frontend:dev:watcher": "",
   "author": {
-    "name": "Destroyer236"
+    "name": "Zephyr"
   }
 }

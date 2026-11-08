@@ -1,4 +1,4 @@
-// sync.go 实现 TokenGuardian Go 的 WebDAV 多端同步。
+// sync.go 实现 Authenticator 的 WebDAV 多端同步。
 //
 // 设计要点：
 //   - 云端只存密文：同步文件复用保险库 .enc 格式（TGVLT 头 + Argon2id 派生 +
@@ -30,11 +30,11 @@ import (
 )
 
 const (
-	syncCfgMagic     = "TGWCF" // TokenGuardian WebDAV ConFig
+	syncCfgMagic     = "TGWCF" // 固定文件头（历史遗留：TokenGuardian WebDAV ConFig），不可更改
 	syncCfgVersion   = byte(1)
 	syncCfgNonceSize = 12
 	// DefaultRemotePath 是远端同步文件的默认路径（相对 WebDAV 根目录）。
-	DefaultRemotePath = "TokenGuardianGo/sync.enc"
+	DefaultRemotePath = "Authenticator/sync.enc"
 	// webdavTimeout 是单次 WebDAV 请求的超时。
 	webdavTimeout = 15 * time.Second
 )
@@ -45,7 +45,7 @@ type SyncConfig struct {
 	Username       string `json:"username"`       // 账号（匿名服务器可为空）
 	WebDAVPassword string `json:"webdavPassword"` // 账号密码 / 应用密码
 	SyncPassword   string `json:"syncPassword"`   // 同步文件加密密码（独立于主密码）
-	RemotePath     string `json:"remotePath"`     // 远端文件路径，如 TokenGuardianGo/sync.enc
+	RemotePath     string `json:"remotePath"`     // 远端文件路径，如 Authenticator/sync.enc
 }
 
 // Validate 校验配置合法性。
@@ -143,7 +143,7 @@ func SaveSyncConfig(path string, v *Vault, cfg *SyncConfig) error {
 // decryptConfigBlob 解密配置文件镜像；密钥不匹配（换了保险库）时返回明确错误。
 func decryptConfigBlob(blob, key []byte) ([]byte, error) {
 	if len(blob) < len(syncCfgMagic)+1+syncCfgNonceSize || string(blob[:len(syncCfgMagic)]) != syncCfgMagic {
-		return nil, errors.New("不是有效的 TokenGuardian 同步配置文件")
+		return nil, errors.New("不是有效的 Authenticator 同步配置文件")
 	}
 	if blob[len(syncCfgMagic)] != syncCfgVersion {
 		return nil, fmt.Errorf("同步配置版本不受支持: %d", blob[len(syncCfgMagic)])
@@ -263,7 +263,7 @@ func DoSync(v *Vault, cfg *SyncConfig) (SyncResult, error) {
 		plain, _, err := decryptWithPassword(blob, []byte(norm.SyncPassword))
 		if err != nil {
 			if errors.Is(err, ErrWrongPassword) {
-				return res, errors.New("远端文件解密失败：同步密码错误，或该路径不是 TokenGuardian 同步文件")
+				return res, errors.New("远端文件解密失败：同步密码错误，或该路径不是 Authenticator 同步文件")
 			}
 			return res, err
 		}

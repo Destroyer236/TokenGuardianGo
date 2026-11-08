@@ -1,4 +1,4 @@
-// genicon 生成 TokenGuardian Go 的应用图标。
+// genicon 生成 Authenticator 的应用图标。
 //
 // 设计：M3E 风格 —— 深蓝渐变圆角方贴片上叠白色圆角盾牌，
 // 盾牌中央镂空钥匙孔（守护 + 密码隐喻）。4x 超采样抗锯齿。

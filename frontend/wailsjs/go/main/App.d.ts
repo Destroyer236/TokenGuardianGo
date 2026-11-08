@@ -11,6 +11,8 @@ export function ExportSingle(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function ExportVault(arg1:string,arg2:string):Promise<void>;
 
+export function FingerprintUnlockAvailable():Promise<boolean>;
+
 export function GetEntry(arg1:string):Promise<main.EntryFull>;
 
 export function GetSnapshot():Promise<Array<main.CodeInfo>>;
@@ -32,6 +34,8 @@ export function NextHOTP(arg1:string):Promise<main.CodeInfo>;
 export function PickOpenFile(arg1:string):Promise<string>;
 
 export function PickSaveFile(arg1:string,arg2:string):Promise<string>;
+
+export function QuickUnlock():Promise<void>;
 
 export function RemoveSecret(arg1:string):Promise<void>;
 

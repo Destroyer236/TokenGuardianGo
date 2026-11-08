@@ -1,4 +1,4 @@
-// Package core 实现 TokenGuardian Go 的 2FA 引擎（TOTP/HOTP）与加密保险库。
+// Package core 实现 Authenticator 的 2FA 引擎（TOTP/HOTP）与加密保险库。
 //
 // otp.go 是 Python 版 TokenGuardian (github.com/Hellohistory/TokenGuardian)
 // token_guardian/core/otp.py 的忠实移植：HMAC-SHA1 + 动态截断（RFC 4226/6238），

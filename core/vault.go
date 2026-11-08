@@ -1,4 +1,4 @@
-// vault.go 实现 TokenGuardian Go 的加密保险库。
+// vault.go 实现 Authenticator 的加密保险库。
 //
 // 相比 Python 版（AES-256-CBC + 固定盐 PBKDF2）的存储设计，本实现升级为：
 //   - AES-256-GCM（认证加密：篡改或密码错误都会校验失败）
@@ -27,7 +27,7 @@ import (
 )
 
 const (
-	vaultMagic   = "TGVLT" // TokenGuardian Vault
+	vaultMagic   = "TGVLT" // 固定文件头（历史遗留：TokenGuardian Vault），不可更改，否则旧保险库无法识别
 	vaultVersion = byte(1)
 	saltSize     = 16
 	nonceSize    = 12
@@ -129,26 +129,52 @@ func encryptBlob(plaintext, key, salt []byte) ([]byte, error) {
 	return out, nil
 }
 
-// decryptWithPassword 解密文件镜像；密码错误或数据被篡改时返回 ErrWrongPassword。
-func decryptWithPassword(blob, password []byte) ([]byte, []byte, error) {
+// parseVaultHeader 校验保险库文件头，返回盐与 nonce。
+func parseVaultHeader(blob []byte) (salt, nonce []byte, err error) {
 	if len(blob) < headerSize || string(blob[:len(vaultMagic)]) != vaultMagic {
-		return nil, nil, errors.New("不是有效的 TokenGuardian 保险库文件")
+		return nil, nil, errors.New("不是有效的 Authenticator 保险库文件")
 	}
 	if blob[len(vaultMagic)] != vaultVersion {
 		return nil, nil, fmt.Errorf("保险库版本不受支持: %d", blob[len(vaultMagic)])
 	}
-	salt := blob[len(vaultMagic)+1 : len(vaultMagic)+1+saltSize]
-	nonce := blob[len(vaultMagic)+1+saltSize : headerSize]
-	key := deriveKey(string(password), salt)
+	salt = blob[len(vaultMagic)+1 : len(vaultMagic)+1+saltSize]
+	nonce = blob[len(vaultMagic)+1+saltSize : headerSize]
+	return salt, nonce, nil
+}
+
+// gcmOpen 认证解密；密钥错误或密文被篡改时失败。
+func gcmOpen(ciphertext, key, nonce []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
+		return nil, err
+	}
+	return gcm.Open(nil, nonce, ciphertext, nil)
+}
+
+// decryptWithPassword 解密文件镜像；密码错误或数据被篡改时返回 ErrWrongPassword。
+func decryptWithPassword(blob, password []byte) ([]byte, []byte, error) {
+	salt, nonce, err := parseVaultHeader(blob)
+	if err != nil {
 		return nil, nil, err
 	}
-	plaintext, err := gcm.Open(nil, nonce, blob[headerSize:], nil)
+	plaintext, err := gcmOpen(blob[headerSize:], deriveKey(string(password), salt), nonce)
+	if err != nil {
+		return nil, nil, ErrWrongPassword
+	}
+	return plaintext, salt, nil
+}
+
+// decryptWithKey 用已派生的密钥解密文件镜像（快速解锁路径，跳过 Argon2 派生）。
+func decryptWithKey(blob, key []byte) ([]byte, []byte, error) {
+	salt, nonce, err := parseVaultHeader(blob)
+	if err != nil {
+		return nil, nil, err
+	}
+	plaintext, err := gcmOpen(blob[headerSize:], key, nonce)
 	if err != nil {
 		return nil, nil, ErrWrongPassword
 	}
@@ -227,6 +253,45 @@ func Open(path, password string) (*Vault, error) {
 		entries: payload.Entries,
 		deleted: payload.Deleted,
 	}, nil
+}
+
+// OpenWithKey 用已派生的密钥直接打开保险库（指纹快速解锁路径，跳过 Argon2 派生）。
+// 密钥与文件不匹配时返回 ErrWrongPassword。
+func OpenWithKey(path string, key []byte) (*Vault, error) {
+	blob, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	plaintext, salt, err := decryptWithKey(blob, key)
+	if err != nil {
+		return nil, err
+	}
+	var payload vaultPayload
+	if err := json.Unmarshal(plaintext, &payload); err != nil {
+		return nil, fmt.Errorf("保险库数据损坏: %w", err)
+	}
+	if payload.Entries == nil {
+		payload.Entries = []Entry{}
+	}
+	return &Vault{
+		path:    path,
+		salt:    append([]byte(nil), salt...),
+		key:     append([]byte(nil), key...),
+		entries: payload.Entries,
+		deleted: payload.Deleted,
+	}, nil
+}
+
+// KeyCopy 返回派生密钥的副本（调用方用后应清零）；保险库未解锁时返回 ErrVaultLocked。
+func (v *Vault) KeyCopy() ([]byte, error) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if v.key == nil {
+		return nil, ErrVaultLocked
+	}
+	out := make([]byte, len(v.key))
+	copy(out, v.key)
+	return out, nil
 }
 
 // save 用已缓存的密钥重新加密并原子写盘（nonce 每次随机，盐固定复用）。

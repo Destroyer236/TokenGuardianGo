@@ -1,8 +1,10 @@
-module TokenGuardianGo
+module authenticator
 
 go 1.26.0
 
 require (
+	github.com/danieljoos/wincred v1.2.3
+	github.com/julian-bruyers/winhello-go v1.1.0
 	github.com/studio-b12/gowebdav v0.13.0
 	github.com/wailsapp/wails/v2 v2.17.1
 	golang.org/x/crypto v0.58.0

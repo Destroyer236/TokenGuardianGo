@@ -1,4 +1,4 @@
-/* TokenGuardian Go — 前端逻辑（调用 Wails Go 绑定） */
+/* Authenticator — 前端逻辑（调用 Wails Go 绑定） */
 "use strict";
 
 const app = window.go.main.App;
@@ -76,6 +76,7 @@ mql.addEventListener("change", () => {
    解锁门
    ============================================================ */
 let gateFirstRun = true; // 当前解锁门模式：true=首启设置密码，false=解锁
+let fpAutoTried = false; // 本次解锁门展示是否已自动触发过指纹验证
 
 // setupGateMode 检测保险库是否存在并切换解锁门模式（可重入：锁定回来后再走一次）
 async function setupGateMode() {
@@ -91,6 +92,30 @@ async function setupGateMode() {
     $("gate-btn").textContent = gateFirstRun ? "设置主密码并创建保险库" : "解锁";
     $("gate-warn").hidden = !gateFirstRun;
     $("gate-pwd2-field").hidden = !gateFirstRun;
+
+    // 指纹快速解锁（默认自动）：解锁门出现即自动弹出系统 Hello 验证，
+    // 手指一按即进；取消弹窗则回退主密码输入，无需任何点击
+    fpAutoTried = false;
+    maybeAutoQuickUnlock();
+}
+
+// maybeAutoQuickUnlock 每次解锁门展示至多自动触发一次 Hello 验证
+function maybeAutoQuickUnlock() {
+    if (gateFirstRun || fpAutoTried) return;
+    fpAutoTried = true;
+    (async () => {
+        try {
+            const avail = await app.FingerprintUnlockAvailable();
+            if (!avail) return;
+            await app.QuickUnlock();
+            if (!$("gate").hidden) enterMain(); // 期间未被密码解锁
+        } catch (e) {
+            const msg = String(e).replace(/^Error:\s*/i, "");
+            if (msg === "已取消指纹验证" || !$("gate").hidden) return; // 取消/已解锁：静默回退密码
+            $("gate-error").textContent = msg;
+            $("gate-error").hidden = false;
+        }
+    })();
 }
 
 async function initGate() {
@@ -475,7 +500,7 @@ $("export-ok").addEventListener("click", async () => {
     errEl.hidden = true;
     if (!pwd) { errEl.textContent = "请输入导出文件密码"; errEl.hidden = false; return; }
 
-    const path = await app.PickSaveFile("选择导出位置", "TokenGuardian-export.enc");
+    const path = await app.PickSaveFile("选择导出位置", "Authenticator-export.enc");
     if (!path) return; // 用户取消
 
     try {
@@ -605,7 +630,7 @@ async function openSyncDialog() {
     $("sync-server").value = s.serverUrl || "";
     $("sync-user").value = s.username || "";
     $("sync-webdav-pwd").value = ""; // 不回传密码，留空 = 沿用已保存的值
-    $("sync-path").value = s.remotePath || "TokenGuardianGo/sync.enc";
+    $("sync-path").value = s.remotePath || "Authenticator/sync.enc";
     $("sync-pwd").value = "";
     $("sync-error").hidden = true;
     dlgSync.showModal();
@@ -752,6 +777,11 @@ $("sync-info-disable").addEventListener("click", () => {
 
 /* ---------- 锁定 / 搜索 / 点击遮罩关闭对话框 ---------- */
 $("btn-lock").addEventListener("click", backToGate);
+
+/* ---------- 关于 ---------- */
+const dlgAbout = $("dlg-about");
+$("btn-about").addEventListener("click", () => dlgAbout.showModal());
+$("about-close").addEventListener("click", () => dlgAbout.close());
 
 $("search").addEventListener("input", (ev) => {
     filterText = ev.target.value;

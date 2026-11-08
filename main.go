@@ -16,7 +16,7 @@ func main() {
 	app := NewApp()
 
 	err := wails.Run(&options.App{
-		Title:     "TokenGuardian Go",
+		Title:     "Authenticator",
 		Width:     960,
 		Height:    640,
 		MinWidth:  800,

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8"/>
     <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-    <title>TokenGuardian Go</title>
+    <title>Authenticator</title>
     <link href="./assets/style.css" rel="stylesheet"/>
 </head>
 <body>
@@ -14,7 +14,7 @@
             <div class="gate-icon">
                 <svg viewBox="0 0 24 24" fill-rule="evenodd"><path fill-rule="evenodd" d="M5.7 6.7 Q5.7 5.2 7.2 5.2 L16.8 5.2 Q18.3 5.2 18.3 6.7 L18.3 11 C18.3 14.4 15.8 17.8 12.8 19.4 Q12 19.82 11.2 19.4 C8.2 17.8 5.7 14.4 5.7 11 Z M10.41 11.9 A2.06 2.06 0 1 1 13.59 11.9 L13.96 15.84 Q13.96 16.54 13.26 16.54 L10.73 16.54 Q10.03 16.54 10.03 15.84 Z"/></svg>
             </div>
-            <h1 class="gate-title">TokenGuardian <em>Go</em></h1>
+            <h1 class="gate-title">Authenticator</h1>
             <p class="gate-sub" id="gate-sub">输入主密码解锁保险库</p>
 
             <div class="field" id="gate-pwd-field">
@@ -40,7 +40,7 @@
     <section hidden id="main">
         <header class="topbar">
             <div class="topbar-heading">
-                <h1 class="topbar-title">TokenGuardian <em>Go</em></h1>
+                <h1 class="topbar-title">Authenticator</h1>
                 <p class="topbar-sub" id="vault-stats">…</p>
             </div>
             <div class="topbar-actions">
@@ -58,6 +58,9 @@
                 </button>
                 <button class="icon-btn" id="btn-lock" title="锁定保险库">
                     <svg viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
+                </button>
+                <button class="icon-btn" id="btn-about" title="关于">
+                    <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
                 </button>
             </div>
         </header>
@@ -216,6 +219,22 @@
             <span class="spacer"></span>
             <button class="btn btn-text" id="sync-cancel" type="button">取消</button>
             <button class="btn btn-filled" id="sync-save" type="button">保存并启用</button>
+        </div>
+    </dialog>
+
+    <!-- ============ 关于对话框 ============ -->
+    <dialog class="m3-dialog m3-dialog-compact" id="dlg-about">
+        <div class="about-head">
+            <div class="gate-icon about-icon">
+                <svg viewBox="0 0 24 24" fill-rule="evenodd"><path fill-rule="evenodd" d="M5.7 6.7 Q5.7 5.2 7.2 5.2 L16.8 5.2 Q18.3 5.2 18.3 6.7 L18.3 11 C18.3 14.4 15.8 17.8 12.8 19.4 Q12 19.82 11.2 19.4 C8.2 17.8 5.7 14.4 5.7 11 Z M10.41 11.9 A2.06 2.06 0 1 1 13.59 11.9 L13.96 15.84 Q13.96 16.54 13.26 16.54 L10.73 16.54 Q10.03 16.54 10.03 15.84 Z"/></svg>
+            </div>
+            <h2 class="dialog-title about-title">Authenticator</h2>
+            <p class="about-tagline">完全离线的 2FA 验证码生成器</p>
+            <p class="about-tech">Go · Wails v2 · Material Design 3 Expressive</p>
+        </div>
+        <p class="about-author">作者：<strong>Zephyr</strong></p>
+        <div class="dialog-actions">
+            <button class="btn btn-text" id="about-close" type="button">关闭</button>
         </div>
     </dialog>
 

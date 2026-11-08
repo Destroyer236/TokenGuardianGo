@@ -18,6 +18,10 @@ export function ExportVault(arg1, arg2) {
   return window['go']['main']['App']['ExportVault'](arg1, arg2);
 }
 
+export function FingerprintUnlockAvailable() {
+  return window['go']['main']['App']['FingerprintUnlockAvailable']();
+}
+
 export function GetEntry(arg1) {
   return window['go']['main']['App']['GetEntry'](arg1);
 }
@@ -60,6 +64,10 @@ export function PickOpenFile(arg1) {
 
 export function PickSaveFile(arg1, arg2) {
   return window['go']['main']['App']['PickSaveFile'](arg1, arg2);
+}
+
+export function QuickUnlock() {
+  return window['go']['main']['App']['QuickUnlock']();
 }
 
 export function RemoveSecret(arg1) {

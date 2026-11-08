@@ -11,7 +11,7 @@ import (
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
-	"TokenGuardianGo/core"
+	"authenticator/core"
 )
 
 // App 是暴露给前端的 Wails 绑定层。
@@ -98,6 +98,7 @@ func (a *App) SetPassword(password string) error {
 		return err
 	}
 	a.vault = v
+	_ = core.EnsureQuickUnlock(v) // 自动准备指纹快速解锁（失败不影响主流程）
 	return nil
 }
 
@@ -113,6 +114,7 @@ func (a *App) Unlock(password string) error {
 		return err
 	}
 	a.vault = v
+	_ = core.EnsureQuickUnlock(v) // 自动准备指纹快速解锁（失败不影响主流程）
 	return nil
 }
 
@@ -506,13 +508,43 @@ func (a *App) scheduleAutoSync() {
 	})
 }
 
+// ---------- 指纹快速解锁（Windows Hello，默认自动） ----------
+
+// FingerprintUnlockAvailable 解锁门是否应自动弹出 Hello 验证：
+// 保险库已存在 + 本机已配置 Windows Hello + 快速解锁凭据已就绪。
+func (a *App) FingerprintUnlockAvailable() bool {
+	if a.vaultPath == "" || !core.VaultFileExists(a.vaultPath) {
+		return false
+	}
+	return core.FingerprintUnlockAvailable()
+}
+
+// QuickUnlock 解锁门：弹出系统 Hello 验证，通过后用存储的派生密钥直接开保险库。
+// 验证期间不持有 a.mu（系统弹窗可能停留任意久），解锁成功后再落状态。
+func (a *App) QuickUnlock() error {
+	a.mu.Lock()
+	already := a.vault != nil
+	a.mu.Unlock()
+	if already {
+		return nil // 已解锁
+	}
+	v, err := core.QuickUnlock(a.vaultPath)
+	if err != nil {
+		return err
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.vault = v
+	return nil
+}
+
 // PickSaveFile 弹出系统"保存文件"对话框，返回所选路径（取消时为空串）。
 func (a *App) PickSaveFile(title, defaultFilename string) string {
 	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
 		Title:           title,
 		DefaultFilename: defaultFilename,
 		Filters: []runtime.FileFilter{
-			{DisplayName: "TokenGuardian 加密文件 (*.enc)", Pattern: "*.enc"},
+			{DisplayName: "Authenticator 加密文件 (*.enc)", Pattern: "*.enc"},
 		},
 	})
 	if err != nil {
@@ -526,7 +558,7 @@ func (a *App) PickOpenFile(title string) string {
 	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
 		Title: title,
 		Filters: []runtime.FileFilter{
-			{DisplayName: "TokenGuardian 加密文件 (*.enc)", Pattern: "*.enc"},
+			{DisplayName: "Authenticator 加密文件 (*.enc)", Pattern: "*.enc"},
 		},
 	})
 	if err != nil {

@@ -1,9 +1,8 @@
-# TokenGuardian Go
+# Authenticator
 
-<p align="center"><img src="build/appicon.png" width="128" alt="TokenGuardian Go 图标"/></p>
+<p align="center"><img src="build/appicon.png" width="128" alt="Authenticator 图标"/></p>
 
-**TokenGuardian Go** 是一个完全离线运行的 2FA（两步验证）验证码生成器，
-是 [TokenGuardian（Python 版）](https://github.com/Hellohistory/TokenGuardian) 的 Go 语言重写版。
+**Authenticator** 是一个完全离线运行的 2FA（两步验证）验证码生成器。
 后端使用 Go + [Wails v2](https://wails.io)，界面遵循 **Material Design 3 Expressive (M3E)** 设计语言。
 
 ## 🖼️ 界面预览
@@ -18,6 +17,7 @@
 
 - **双算法支持**：TOTP（RFC 6238，基于时间）与 HOTP（RFC 4226，基于计数器），6 位验证码
 - **主密码保险库**：所有密钥经 AES-256-GCM 认证加密后存入本地保险库文件，主密码通过 Argon2id（64MB 内存参数、独立随机盐）派生密钥，抗 GPU 爆破
+- **指纹默认解锁（零操作）**：无需任何配置——首次用主密码解锁后自动就绪，此后每次打开或锁定后自动弹出 Windows Hello 系统验证窗口（指纹 / 人脸 / PIN，按登录设置），手指一按即进，跳过 Argon2 秒级等待；取消弹窗随时回退主密码
 - **完整密钥管理**：添加 / 编辑 / 删除 / 重命名 / 搜索过滤，TOTP 倒计时环（最后 5 秒变红预警）
 - **加密备份**：全部或单条密钥导出为独立密码加密的 `.enc` 文件，可跨设备导入（重名自动跳过）
 - **WebDAV 多端同步**：通过坚果云 / Nextcloud / 自建 WebDAV 在多台设备间同步密钥，条目级双向合并、删除传播，云端只见密文
@@ -26,9 +26,11 @@
 - **M3E 视觉**：Expressive 弹簧动效、8 级圆角体系、48 色彩角色（明暗双主题，跟随系统可手动切换）
 - **原子写入**：保险库每次修改均以临时文件 + rename 原子落盘，防意外断电损坏
 
+> 💡 **指纹解锁的安全边界**：指纹本身不参与加密，只是系统级的"确认是本人"验证；主密码验证成功后，Argon2id 派生密钥（非主密码明文）自动按 Windows 用户隔离存储于凭据管理器，同一用户会话内的其他进程理论上可读取——这是 Bitwarden 等主流密码管理器 Windows Hello 解锁的同等局限。保险库被删除重置后，存储的密钥自动失效并在下次使用时清除。
+
 ## 📥 下载安装
 
-前往 [Releases](../../releases) 页面下载 `TokenGuardianGo.exe`，单文件免安装，双击即用。
+前往 [Releases](../../releases) 页面下载 `Authenticator.exe`，单文件免安装，双击即用。
 
 > 要求：Windows 10/11（自带 WebView2 运行时）。
 >
@@ -40,7 +42,7 @@
 
 ```
 你的目录/
-├── TokenGuardianGo.exe
+├── Authenticator.exe
 ├── vault.enc    ← 隐藏属性，存放所有加密后的密钥
 └── webdav.enc   ← 隐藏属性，WebDAV 同步配置（仅启用同步后出现）
 ```
@@ -80,10 +82,10 @@ wails dev
 
 # 构建单文件 exe
 wails build
-# 产物: build/bin/TokenGuardianGo.exe
+# 产物: build/bin/Authenticator.exe
 
 # （可选）用 UPX 压缩体积，约 12 MB → 3.6 MB，功能无损
-upx --best --lzma build/bin/TokenGuardianGo.exe
+upx --best --lzma build/bin/Authenticator.exe
 ```
 
 > 提示：UPX 加壳的 exe 个别杀毒软件可能误报，属已知现象；介意的话跳过压缩步骤即可。
@@ -105,15 +107,6 @@ go test ./core/
 - HOTP：RFC 4226 附录 D 全部 10 个测试向量
 - TOTP：RFC 6238 附录 B（SHA1）测试向量
 - 保险库：读写 round-trip、错误密码拒绝、密文篡改检测、导出导入
-
-## 🔐 与 Python 版的存储差异
-
-| | Python 版 | Go 版 |
-|---|---|---|
-| 加密 | AES-256-CBC | AES-256-GCM（认证加密，防篡改） |
-| 密钥派生 | PBKDF2-SHA256，硬编码固定盐 | Argon2id，每库独立随机盐 |
-| 完整性校验 | 无 | GCM 内建（密码错误/篡改即失败） |
-| 写入方式 | 直接覆写 | 临时文件 + rename 原子写 |
 
 ## 📄 许可证
 
