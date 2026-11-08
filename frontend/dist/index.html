@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+    <meta charset="UTF-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>TokenGuardian Go</title>
+    <link href="./assets/style.css" rel="stylesheet"/>
+</head>
+<body>
+
+    <!-- ============ 解锁门 ============ -->
+    <section class="gate" id="gate">
+        <div class="gate-card">
+            <div class="gate-icon">
+                <svg viewBox="0 0 24 24" fill-rule="evenodd"><path fill-rule="evenodd" d="M5.7 6.7 Q5.7 5.2 7.2 5.2 L16.8 5.2 Q18.3 5.2 18.3 6.7 L18.3 11 C18.3 14.4 15.8 17.8 12.8 19.4 Q12 19.82 11.2 19.4 C8.2 17.8 5.7 14.4 5.7 11 Z M10.41 11.9 A2.06 2.06 0 1 1 13.59 11.9 L13.96 15.84 Q13.96 16.54 13.26 16.54 L10.73 16.54 Q10.03 16.54 10.03 15.84 Z"/></svg>
+            </div>
+            <h1 class="gate-title">TokenGuardian <em>Go</em></h1>
+            <p class="gate-sub" id="gate-sub">输入主密码解锁保险库</p>
+
+            <div class="field" id="gate-pwd-field">
+                <input autocomplete="off" id="gate-pwd" placeholder=" " type="password"/>
+                <label for="gate-pwd">主密码</label>
+            </div>
+            <div class="field" hidden id="gate-pwd2-field">
+                <input autocomplete="off" id="gate-pwd2" placeholder=" " type="password"/>
+                <label for="gate-pwd2">确认主密码</label>
+            </div>
+
+            <p class="gate-warn" hidden id="gate-warn">
+                主密码用于加密所有 2FA 密钥，<strong>无法找回、无法重置</strong>，请务必牢记。
+            </p>
+            <p class="gate-error" hidden id="gate-error" role="alert"></p>
+
+            <button class="btn btn-filled btn-block" id="gate-btn">解锁</button>
+            <p class="gate-foot">完全离线 · AES-256-GCM + Argon2id 加密存储</p>
+        </div>
+    </section>
+
+    <!-- ============ 主界面 ============ -->
+    <section hidden id="main">
+        <header class="topbar">
+            <div class="topbar-heading">
+                <h1 class="topbar-title">TokenGuardian <em>Go</em></h1>
+                <p class="topbar-sub" id="vault-stats">…</p>
+            </div>
+            <div class="topbar-actions">
+                <button class="icon-btn" id="btn-import" title="导入密钥（.enc）">
+                    <svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+                </button>
+                <button class="icon-btn" id="btn-export" title="导出全部密钥">
+                    <svg viewBox="0 0 24 24"><path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z"/></svg>
+                </button>
+                <button class="icon-btn" id="btn-theme" title="切换亮/暗主题">
+                    <svg viewBox="0 0 24 24" id="theme-icon"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-2.98 0-5.4-2.42-5.4-5.4 0-1.81.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z"/></svg>
+                </button>
+                <button class="icon-btn" id="btn-lock" title="锁定保险库">
+                    <svg viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
+                </button>
+            </div>
+        </header>
+
+        <div class="content">
+            <div class="searchbar">
+                <svg class="searchbar-icon" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+                <input id="search" placeholder="搜索密钥名称…" type="text"/>
+            </div>
+
+            <main class="list" id="list"></main>
+
+            <div class="empty" hidden id="empty-state">
+                <div class="empty-icon">
+                    <svg viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-1 7h2v2h2v2h-2v2h-2v-2H9v-2h2V8z"/></svg>
+                </div>
+                <h2 class="empty-title">还没有任何密钥</h2>
+                <p class="empty-sub">点击右下角的按钮，添加你的第一个 2FA 密钥</p>
+                <button class="btn btn-tonal" id="empty-add">添加密钥</button>
+            </div>
+        </div>
+
+        <button class="fab" id="fab" title="添加密钥">
+            <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+        </button>
+    </section>
+
+    <!-- ============ 添加 / 编辑对话框 ============ -->
+    <dialog class="m3-dialog" id="dlg-entry">
+        <h2 class="dialog-title" id="entry-dialog-title">添加密钥</h2>
+
+        <div class="field">
+            <input id="entry-name" maxlength="64" placeholder=" " type="text"/>
+            <label for="entry-name">密钥名称</label>
+        </div>
+
+        <div class="field field-mono">
+            <input id="entry-secret" placeholder=" " spellcheck="false" type="text"/>
+            <label for="entry-secret">Base32 密钥</label>
+        </div>
+
+        <p class="field-caption">即 2FA 绑定时给出的密钥（通常以字母组成的 Base32 串，如 JBSW Y3DP EHPK 3PXP）</p>
+
+        <div class="seg-group" id="seg-algo" role="radiogroup">
+            <button class="seg-btn seg-checked" data-value="TOTP" type="button">TOTP · 时间型</button>
+            <button class="seg-btn" data-value="HOTP" type="button">HOTP · 计数型</button>
+        </div>
+
+        <div class="field" hidden id="entry-counter-field">
+            <input id="entry-counter" inputmode="numeric" min="0" placeholder=" " type="number" value="0"/>
+            <label for="entry-counter">HOTP 初始计数值</label>
+        </div>
+
+        <p class="dialog-error" hidden id="entry-error" role="alert"></p>
+
+        <div class="dialog-actions">
+            <button class="btn btn-text" id="entry-cancel" type="button">取消</button>
+            <button class="btn btn-filled" id="entry-save" type="button">保存</button>
+        </div>
+    </dialog>
+
+    <!-- ============ 删除确认对话框 ============ -->
+    <dialog class="m3-dialog m3-dialog-compact" id="dlg-confirm">
+        <h2 class="dialog-title">删除密钥？</h2>
+        <p class="dialog-body" id="confirm-body">确定要删除该密钥吗？此操作无法撤销。</p>
+        <div class="dialog-actions">
+            <button class="btn btn-text" id="confirm-cancel" type="button">取消</button>
+            <button class="btn btn-filled-danger" id="confirm-ok" type="button">删除</button>
+        </div>
+    </dialog>
+
+    <!-- ============ 导出对话框 ============ -->
+    <dialog class="m3-dialog m3-dialog-compact" id="dlg-export">
+        <h2 class="dialog-title" id="export-title">导出密钥</h2>
+        <p class="dialog-body" id="export-scope">将全部密钥导出为加密备份文件。</p>
+        <div class="field">
+            <input autocomplete="new-password" id="export-pwd" placeholder=" " type="password"/>
+            <label for="export-pwd">导出文件密码</label>
+        </div>
+        <p class="dialog-error" hidden id="export-error" role="alert"></p>
+        <div class="dialog-actions">
+            <button class="btn btn-text" id="export-cancel" type="button">取消</button>
+            <button class="btn btn-filled" id="export-ok" type="button">导出</button>
+        </div>
+    </dialog>
+
+    <!-- ============ 导入对话框 ============ -->
+    <dialog class="m3-dialog m3-dialog-compact" id="dlg-import">
+        <h2 class="dialog-title">导入密钥</h2>
+        <p class="dialog-body" id="import-file">已选择文件：-</p>
+        <div class="field">
+            <input autocomplete="new-password" id="import-pwd" placeholder=" " type="password"/>
+            <label for="import-pwd">导出文件密码</label>
+        </div>
+        <p class="dialog-error" hidden id="import-error" role="alert"></p>
+        <div class="dialog-actions">
+            <button class="btn btn-text" id="import-cancel" type="button">取消</button>
+            <button class="btn btn-filled" id="import-ok" type="button">导入</button>
+        </div>
+    </dialog>
+
+    <!-- ============ Snackbar ============ -->
+    <div class="snackbar" hidden id="snackbar" role="status"></div>
+
+    <script src="./assets/main.js"></script>
+</body>
+</html>

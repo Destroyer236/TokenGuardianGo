@@ -1,0 +1,12 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "TokenGuardianGo",
+  "outputfilename": "TokenGuardianGo",
+  "frontend:install": "",
+  "frontend:build": "",
+  "frontend:dev:watcher": "",
+  "author": {
+    "name": "Zephyr",
+    "email": "Zephyr@Atlantic.com"
+  }
+}
