@@ -1,5 +1,23 @@
 export namespace core {
 	
+	export class ImportResult {
+	    imported: number;
+	    duplicates: number;
+	    invalid: number;
+	    tombstoneOnly: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new ImportResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.imported = source["imported"];
+	        this.duplicates = source["duplicates"];
+	        this.invalid = source["invalid"];
+	        this.tombstoneOnly = source["tombstoneOnly"];
+	    }
+	}
 	export class RemoteFileInfo {
 	    exists: boolean;
 	    size: number;
@@ -125,6 +143,7 @@ export namespace main {
 	    serverUrl: string;
 	    username: string;
 	    remotePath: string;
+	    noSyncDeletions: boolean;
 	    lastSyncAt: string;
 	    lastSyncText: string;
 	    lastSyncError?: string;
@@ -139,6 +158,7 @@ export namespace main {
 	        this.serverUrl = source["serverUrl"];
 	        this.username = source["username"];
 	        this.remotePath = source["remotePath"];
+	        this.noSyncDeletions = source["noSyncDeletions"];
 	        this.lastSyncAt = source["lastSyncAt"];
 	        this.lastSyncText = source["lastSyncText"];
 	        this.lastSyncError = source["lastSyncError"];

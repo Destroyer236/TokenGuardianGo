@@ -186,14 +186,25 @@ func (a *App) AddSecret(name, secret, algo string, counter uint64) error {
 	return nil
 }
 
-// RemoveSecret 删除密钥。
+// RemoveSecret 删除密钥。同步配置开启"删除不同步"时仅记录本地墓碑，
+// 云端与其它设备保留该密钥；读取不到有效同步配置时按原有行为传播删除。
 func (a *App) RemoveSecret(name string) error {
 	v, err := a.requireVault()
 	if err != nil {
 		return err
 	}
-	if err := v.Remove(name); err != nil {
-		return err
+	localOnly := false
+	if cfg, err := core.LoadSyncConfig(a.syncCfgPath, v); err == nil && cfg != nil {
+		localOnly = cfg.NoSyncDeletions
+	}
+	if localOnly {
+		if err := v.RemoveLocalOnly(name); err != nil {
+			return err
+		}
+	} else {
+		if err := v.Remove(name); err != nil {
+			return err
+		}
 	}
 	a.scheduleAutoSync()
 	return nil
@@ -300,33 +311,34 @@ func (a *App) ExportSingle(name, path, password string) error {
 	return v.ExportEntries([]core.Entry{e}, path, password)
 }
 
-// ImportVault 从加密文件导入密钥，返回导入条数。
-func (a *App) ImportVault(path, password string) (int, error) {
+// ImportVault 从加密文件导入密钥，返回导入明细。
+func (a *App) ImportVault(path, password string) (core.ImportResult, error) {
 	v, err := a.requireVault()
 	if err != nil {
-		return 0, err
+		return core.ImportResult{}, err
 	}
-	n, err := v.Import(path, password)
+	res, err := v.Import(path, password)
 	if err != nil {
-		return 0, err
+		return core.ImportResult{}, err
 	}
-	if n > 0 {
+	if res.Imported > 0 {
 		a.scheduleAutoSync()
 	}
-	return n, nil
+	return res, nil
 }
 
 // ---------- WebDAV 同步 ----------
 
 // SyncSettingsInfo 同步配置概要（不回传任何密码）。
 type SyncSettingsInfo struct {
-	Configured    bool   `json:"configured"`
-	ServerURL     string `json:"serverUrl"`
-	Username      string `json:"username"`
-	RemotePath    string `json:"remotePath"`
-	LastSyncAt    string `json:"lastSyncAt"`             // 最近同步时刻 "2006-01-02 15:04"，空 = 从未
-	LastSyncText  string `json:"lastSyncText"`           // 最近一次成功同步摘要，空 = 尚未同步
-	LastSyncError string `json:"lastSyncError,omitempty"` // 最近一次同步失败原因
+	Configured      bool   `json:"configured"`
+	ServerURL       string `json:"serverUrl"`
+	Username        string `json:"username"`
+	RemotePath      string `json:"remotePath"`
+	NoSyncDeletions bool   `json:"noSyncDeletions"`         // 删除密钥时是否不传播到云端
+	LastSyncAt      string `json:"lastSyncAt"`              // 最近同步时刻 "2006-01-02 15:04"，空 = 从未
+	LastSyncText    string `json:"lastSyncText"`            // 最近一次成功同步摘要，空 = 尚未同步
+	LastSyncError   string `json:"lastSyncError,omitempty"` // 最近一次同步失败原因
 }
 
 // GetSyncSettings 返回当前同步配置与最近同步状态。
@@ -355,12 +367,13 @@ func (a *App) GetSyncSettings() SyncSettingsInfo {
 	info.ServerURL = cfg.ServerURL
 	info.Username = cfg.Username
 	info.RemotePath = cfg.RemotePath
+	info.NoSyncDeletions = cfg.NoSyncDeletions
 	return info
 }
 
 // SaveSyncSettings 校验连通性后保存同步配置。
 // 两个密码参数传空表示沿用已保存的值（修改服务器地址时不必重输密码）。
-func (a *App) SaveSyncSettings(serverURL, username, webdavPassword, remotePath, syncPassword string) error {
+func (a *App) SaveSyncSettings(serverURL, username, webdavPassword, remotePath, syncPassword string, noSyncDeletions bool) error {
 	v, err := a.requireVault()
 	if err != nil {
 		return err
@@ -376,11 +389,12 @@ func (a *App) SaveSyncSettings(serverURL, username, webdavPassword, remotePath, 
 		syncPassword = old.SyncPassword
 	}
 	cfg := &core.SyncConfig{
-		ServerURL:      serverURL,
-		Username:       username,
-		WebDAVPassword: webdavPassword,
-		SyncPassword:   syncPassword,
-		RemotePath:     remotePath,
+		ServerURL:       serverURL,
+		Username:        username,
+		WebDAVPassword:  webdavPassword,
+		SyncPassword:    syncPassword,
+		RemotePath:      remotePath,
+		NoSyncDeletions: noSyncDeletions,
 	}
 	cfg.Normalize()
 	if err := cfg.Validate(); err != nil {

@@ -325,6 +325,29 @@ input { font-family: inherit; color: inherit; }
     color: var(--c-on-surface-variant);
 }
 
+/* 复选框行（M3 checkbox + 说明文字） */
+.check-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-top: 14px;
+    padding: 0 4px;
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--c-on-surface-variant);
+    cursor: pointer;
+    user-select: none;
+}
+
+.check-row input {
+    flex: none;
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    accent-color: var(--c-primary);
+    cursor: pointer;
+}
+
 /* 对话框内的 field 背景 = 对话框表面色 */
 .m3-dialog .field { --c-field-bg: var(--c-surface-container-high); }
 

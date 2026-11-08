@@ -21,7 +21,7 @@ export function GetSyncRemoteInfo():Promise<core.RemoteFileInfo>;
 
 export function GetSyncSettings():Promise<main.SyncSettingsInfo>;
 
-export function ImportVault(arg1:string,arg2:string):Promise<number>;
+export function ImportVault(arg1:string,arg2:string):Promise<core.ImportResult>;
 
 export function IsUnlocked():Promise<boolean>;
 
@@ -39,7 +39,7 @@ export function QuickUnlock():Promise<void>;
 
 export function RemoveSecret(arg1:string):Promise<void>;
 
-export function SaveSyncSettings(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<void>;
+export function SaveSyncSettings(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:boolean):Promise<void>;
 
 export function SetPassword(arg1:string):Promise<void>;
 

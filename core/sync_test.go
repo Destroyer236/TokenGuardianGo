@@ -228,6 +228,156 @@ func TestVaultRemoveTombstone(t *testing.T) {
 	}
 }
 
+// TestRemoveLocalOnlyNotSynced 本地删除不写入同步负载，但本机保持删除状态、不被远端复活。
+func TestRemoveLocalOnlyNotSynced(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "vault.enc")
+
+	v := newTestVault(t, dir)
+	base := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	if err := v.Add("GitHub", testSecret, AlgoTOTP, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := v.RemoveLocalOnly("GitHub"); err != nil {
+		t.Fatal(err)
+	}
+	if len(v.Deleted()) != 1 || !v.Deleted()[0].LocalOnly {
+		t.Fatalf("应记录本地墓碑: %+v", v.Deleted())
+	}
+
+	// 同步负载不包含本地墓碑（远端不会看到这条删除）
+	plain, err := v.syncPayload()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var p vaultPayload
+	if err := json.Unmarshal(plain, &p); err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Entries) != 0 || len(p.Deleted) != 0 {
+		t.Fatalf("同步负载应为空（本地墓碑不上传）: entries=%d deleted=%d", len(p.Entries), len(p.Deleted))
+	}
+	v.Close()
+
+	// 重开后墓碑仍在（本地保持删除状态）
+	v2, err := Open(path, vaultPwd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer v2.Close()
+	if len(v2.Deleted()) != 1 || !v2.Deleted()[0].LocalOnly {
+		t.Fatalf("重开后本地墓碑应保留: %+v", v2.Deleted())
+	}
+
+	// 云端仍是旧状态（条目还在、无墓碑）→ 合并后本机依旧保持删除
+	if _, err := v2.MergeFrom(
+		[]Entry{mkEntry("GitHub", testSecret, AlgoTOTP, base)},
+		nil,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := v2.Get("GitHub"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("本地墓碑应遮蔽远端条目，GitHub 不应复活: %v", err)
+	}
+	if len(v2.Deleted()) != 1 || !v2.Deleted()[0].LocalOnly {
+		t.Fatalf("合并后应保持本地墓碑标记: %+v", v2.Deleted())
+	}
+}
+
+// TestMergeLocalOnlyTombstoneStamp 本地较新的"仅本地删除"墓碑不被远端旧墓碑升级为可同步墓碑；
+// 远端较新的墓碑胜出时按可同步处理。
+func TestMergeLocalOnlyTombstoneStamp(t *testing.T) {
+	dir := t.TempDir()
+	v := newTestVault(t, dir)
+	defer v.Close()
+
+	base := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	v.mu.Lock()
+	v.deleted = []Entry{{Name: "A", UpdatedAt: base.Add(2 * time.Hour), LocalOnly: true}}
+	v.mu.Unlock()
+
+	// 远端墓碑较旧 → 本地胜出，保持 LocalOnly
+	if _, err := v.MergeFrom(nil, []Entry{mkEntry("A", "", "", base.Add(time.Hour))}); err != nil {
+		t.Fatal(err)
+	}
+	if len(v.Deleted()) != 1 || !v.Deleted()[0].LocalOnly {
+		t.Fatalf("本地较新的墓碑应保持 LocalOnly: %+v", v.Deleted())
+	}
+
+	// 远端墓碑较新 → 覆盖为可同步墓碑（另一台设备重新删除的传播）
+	if _, err := v.MergeFrom(nil, []Entry{mkEntry("A", "", "", base.Add(3*time.Hour))}); err != nil {
+		t.Fatal(err)
+	}
+	if len(v.Deleted()) != 1 || v.Deleted()[0].LocalOnly {
+		t.Fatalf("远端较新的墓碑应为可同步墓碑: %+v", v.Deleted())
+	}
+}
+
+// TestReAddClearsLocalOnlyTombstone 本地删除后重建同名密钥：墓碑清除、条目重新进入同步负载。
+func TestReAddClearsLocalOnlyTombstone(t *testing.T) {
+	dir := t.TempDir()
+	v := newTestVault(t, dir)
+	defer v.Close()
+
+	if err := v.Add("GitHub", testSecret, AlgoTOTP, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := v.RemoveLocalOnly("GitHub"); err != nil {
+		t.Fatal(err)
+	}
+	if err := v.Add("GitHub", testSecret2, AlgoTOTP, 0); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(v.Deleted()); n != 0 {
+		t.Fatalf("重建同名密钥后墓碑应清除, 墓碑数 = %d", n)
+	}
+	plain, err := v.syncPayload()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var p vaultPayload
+	if err := json.Unmarshal(plain, &p); err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Entries) != 1 || p.Entries[0].Name != "GitHub" || p.Entries[0].Secret != testSecret2 {
+		t.Fatalf("同步负载应含重建的 GitHub: %+v", p.Entries)
+	}
+}
+
+// TestImportTombstoneOnlyFile 导入只含墓碑的同步文件：导入 0 条并明确标记，而不是笼统报"重名或无效"。
+func TestImportTombstoneOnlyFile(t *testing.T) {
+	dir := t.TempDir()
+	v := newTestVault(t, dir)
+	defer v.Close()
+
+	salt := make([]byte, saltSize)
+	if _, err := rand.Read(salt); err != nil {
+		t.Fatal(err)
+	}
+	plain, err := json.Marshal(vaultPayload{
+		Deleted: []Entry{{Name: "Gone", UpdatedAt: time.Now()}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	syncFile := filepath.Join(dir, "sync.enc")
+	blob, err := encryptBlob(plain, deriveKey("sync-pwd", salt), salt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := writeVaultFile(syncFile, blob); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := v.Import(syncFile, "sync-pwd")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Imported != 0 || !res.TombstoneOnly {
+		t.Fatalf("应识别为纯墓碑同步文件, got %+v", res)
+	}
+}
+
 // TestVaultOldFormatWithoutTombstones 旧版保险库文件（无 deleted 字段）必须能正常打开并继续写入。
 func TestVaultOldFormatWithoutTombstones(t *testing.T) {
 	dir := t.TempDir()

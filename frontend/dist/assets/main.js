@@ -543,9 +543,9 @@ $("import-ok").addEventListener("click", async () => {
     if (!pwd) { errEl.textContent = "请输入导出文件密码"; errEl.hidden = false; return; }
 
     try {
-        const n = await app.ImportVault(importFilePath, pwd);
+        const r = await app.ImportVault(importFilePath, pwd);
         dlgImport.close();
-        snackbar(n > 0 ? `成功导入 ${n} 条密钥` : "没有新密钥可导入（全部重名或无效）");
+        snackbar(importResultText(r));
         await loadAndRender();
         await tick();
         scheduleAutoSync();
@@ -555,6 +555,21 @@ $("import-ok").addEventListener("click", async () => {
     }
 });
 $("import-cancel").addEventListener("click", () => dlgImport.close());
+
+// importResultText 把导入明细转成用户可读的结果提示。
+function importResultText(r) {
+    const skips = [];
+    if (r.duplicates) skips.push(`重名 ${r.duplicates} 条`);
+    if (r.invalid) skips.push(`无效 ${r.invalid} 条`);
+    if (r.imported > 0) {
+        return skips.length ? `成功导入 ${r.imported} 条密钥（跳过：${skips.join(" · ")}）` : `成功导入 ${r.imported} 条密钥`;
+    }
+    if (r.tombstoneOnly) {
+        return "该文件不含密钥条目（只含删除记录）——它应是同步文件而非导出备份，如需恢复请配置同步或重新添加密钥";
+    }
+    if (skips.length) return `没有新密钥可导入（${skips.join(" · ")}）`;
+    return "该文件中没有密钥条目";
+}
 
 /* ============================================================
    WebDAV 同步
@@ -632,6 +647,7 @@ async function openSyncDialog() {
     $("sync-webdav-pwd").value = ""; // 不回传密码，留空 = 沿用已保存的值
     $("sync-path").value = s.remotePath || "Authenticator/sync.enc";
     $("sync-pwd").value = "";
+    $("sync-no-del").checked = !!s.noSyncDeletions;
     $("sync-error").hidden = true;
     dlgSync.showModal();
     $("sync-server").focus();
@@ -675,6 +691,7 @@ async function saveSyncSettings() {
             $("sync-webdav-pwd").value,
             $("sync-path").value.trim(),
             $("sync-pwd").value,
+            $("sync-no-del").checked,
         );
         dlgSync.close();
         snackbar("同步配置已保存");
@@ -716,6 +733,9 @@ async function openSyncInfo() {
     $("sync-info-server").textContent = s.serverUrl || "—";
     $("sync-info-user").textContent = s.username || "（匿名）";
     $("sync-info-path").textContent = s.remotePath || "—";
+    $("sync-info-delsync").textContent = s.configured
+        ? (s.noSyncDeletions ? "仅本机生效（不同步）" : "同步到云端")
+        : "—";
 
     const last = [];
     if (s.lastSyncAt) last.push(s.lastSyncAt);

@@ -46,6 +46,10 @@ type SyncConfig struct {
 	WebDAVPassword string `json:"webdavPassword"` // 账号密码 / 应用密码
 	SyncPassword   string `json:"syncPassword"`   // 同步文件加密密码（独立于主密码）
 	RemotePath     string `json:"remotePath"`     // 远端文件路径，如 Authenticator/sync.enc
+	// NoSyncDeletions 为 true 时，本机删除密钥只记录本地墓碑、不传播到云端
+	// （云端与其它设备保留该密钥）。旧配置文件无此字段，反序列化为 false，
+	// 即保持原有"删除同步"行为。
+	NoSyncDeletions bool `json:"noSyncDeletions,omitempty"`
 }
 
 // Validate 校验配置合法性。
@@ -300,13 +304,20 @@ func DoSync(v *Vault, cfg *SyncConfig) (SyncResult, error) {
 }
 
 // syncPayload 返回 entries+墓碑 的 JSON 明文（加锁快照）。
+// 本地墓碑（LocalOnly）不写入：对应的删除不传播到云端与其它设备。
 func (v *Vault) syncPayload() ([]byte, error) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	if v.key == nil {
 		return nil, ErrVaultLocked
 	}
-	return json.Marshal(vaultPayload{Entries: v.entries, Deleted: v.deleted})
+	deleted := make([]Entry, 0, len(v.deleted))
+	for _, d := range v.deleted {
+		if !d.LocalOnly {
+			deleted = append(deleted, d)
+		}
+	}
+	return json.Marshal(vaultPayload{Entries: v.entries, Deleted: deleted})
 }
 
 // encryptSyncPayload 用同步密码 + 独立随机盐加密同步明文，输出完整 .enc 文件镜像。

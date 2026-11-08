@@ -58,13 +58,16 @@ const (
 	AlgoHOTP = "HOTP"
 )
 
-// Entry 是保险库中的一条 2FA 密钥。
+// Entry 是保险库中的一条 2FA 密钥；也用作删除墓碑（此时 Secret/Algo/Counter 为零值）。
 type Entry struct {
 	Name      string    `json:"name"`
 	Secret    string    `json:"secret"` // Base32
 	Algo      string    `json:"algo"`   // TOTP | HOTP
 	Counter   uint64    `json:"counter"`
 	UpdatedAt time.Time `json:"updatedAt"`
+	// LocalOnly 仅对墓碑有意义：标记为 true 的墓碑不写入同步负载，
+	// 即删除只在本地生效，云端与其它设备保留该密钥。
+	LocalOnly bool `json:"localOnly,omitempty"`
 }
 
 type vaultPayload struct {
@@ -395,12 +398,23 @@ func (v *Vault) Add(name, secret, algo string, counter uint64) error {
 	if algo != AlgoHOTP {
 		counter = 0
 	}
+	v.clearTombstone(name) // 重建同名密钥后旧墓碑（若有）已过期
 	v.entries = append(v.entries, Entry{Name: name, Secret: secret, Algo: algo, Counter: counter, UpdatedAt: time.Now()})
 	return v.save()
 }
 
-// Remove 删除指定名称的密钥，并记录墓碑（同步时向其他设备传播删除）。
+// Remove 删除指定名称的密钥，并记录同步墓碑（删除会传播到云端与其它设备）。
 func (v *Vault) Remove(name string) error {
+	return v.remove(name, false)
+}
+
+// RemoveLocalOnly 删除密钥但只记录本地墓碑：删除不写入同步负载，
+// 云端与其它设备保留该密钥；本机因墓碑遮蔽不会在同步时复活。
+func (v *Vault) RemoveLocalOnly(name string) error {
+	return v.remove(name, true)
+}
+
+func (v *Vault) remove(name string, localOnly bool) error {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	if v.key == nil {
@@ -409,7 +423,7 @@ func (v *Vault) Remove(name string) error {
 	for i, e := range v.entries {
 		if e.Name == name {
 			v.entries = append(v.entries[:i], v.entries[i+1:]...)
-			v.recordTombstone(name)
+			v.recordTombstone(name, localOnly)
 			return v.save()
 		}
 	}
@@ -417,15 +431,25 @@ func (v *Vault) Remove(name string) error {
 }
 
 // recordTombstone 记录删除墓碑；同名墓碑已存在时更新为最新时间（调用方必须已持有 v.mu）。
-func (v *Vault) recordTombstone(name string) {
+func (v *Vault) recordTombstone(name string, localOnly bool) {
 	now := time.Now()
 	for i := range v.deleted {
 		if v.deleted[i].Name == name {
-			v.deleted[i] = Entry{Name: name, UpdatedAt: now}
+			v.deleted[i] = Entry{Name: name, UpdatedAt: now, LocalOnly: localOnly}
 			return
 		}
 	}
-	v.deleted = append(v.deleted, Entry{Name: name, UpdatedAt: now})
+	v.deleted = append(v.deleted, Entry{Name: name, UpdatedAt: now, LocalOnly: localOnly})
+}
+
+// clearTombstone 清除同名墓碑（重新创建同名密钥后，旧墓碑已过期）（调用方必须已持有 v.mu）。
+func (v *Vault) clearTombstone(name string) {
+	for i := range v.deleted {
+		if v.deleted[i].Name == name {
+			v.deleted = append(v.deleted[:i], v.deleted[i+1:]...)
+			return
+		}
+	}
 }
 
 // Update 修改密钥（重命名、换密钥、换算法、改计数器）。
@@ -441,15 +465,18 @@ func (v *Vault) Update(oldName, newName, secret, algo string, counter uint64) er
 	if newName != oldName && v.getLocked(newName) {
 		return ErrNameExists
 	}
-	for i := range v.entries {
-		if v.entries[i].Name == oldName {
-			if algo != AlgoHOTP {
-				counter = 0
+		for i := range v.entries {
+			if v.entries[i].Name == oldName {
+				if algo != AlgoHOTP {
+					counter = 0
+				}
+				v.entries[i] = Entry{Name: newName, Secret: secret, Algo: algo, Counter: counter, UpdatedAt: time.Now()}
+				if newName != oldName {
+					v.clearTombstone(newName) // 复用已删除的名称时清掉过期墓碑
+				}
+				return v.save()
 			}
-			v.entries[i] = Entry{Name: newName, Secret: secret, Algo: algo, Counter: counter, UpdatedAt: time.Now()}
-			return v.save()
 		}
-	}
 	return ErrNotFound
 }
 
@@ -512,32 +539,42 @@ func (v *Vault) ExportEntries(entries []Entry, path, password string) error {
 	return writeVaultFile(path, blob)
 }
 
+// ImportResult 描述一次导入的明细。
+type ImportResult struct {
+	Imported      int  `json:"imported"`      // 成功导入条数
+	Duplicates    int  `json:"duplicates"`    // 因重名跳过条数
+	Invalid       int  `json:"invalid"`       // 因数据非法跳过条数
+	TombstoneOnly bool `json:"tombstoneOnly"` // 文件不含密钥条目、只含删除墓碑（说明这是同步文件而非导出备份）
+}
+
 // Import 从加密文件（与导出格式一致，独立密码）导入密钥；重名或非法条目跳过。
-// 返回成功导入的条数。
-func (v *Vault) Import(path, password string) (int, error) {
+func (v *Vault) Import(path, password string) (ImportResult, error) {
+	var res ImportResult
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	if v.key == nil {
-		return 0, ErrVaultLocked
+		return res, ErrVaultLocked
 	}
 	blob, err := os.ReadFile(path)
 	if err != nil {
-		return 0, err
+		return res, err
 	}
 	plaintext, _, err := decryptWithPassword(blob, []byte(password))
 	if err != nil {
-		return 0, err
+		return res, err
 	}
 	var payload vaultPayload
 	if err := json.Unmarshal(plaintext, &payload); err != nil {
-		return 0, fmt.Errorf("导入文件数据损坏: %w", err)
+		return res, fmt.Errorf("导入文件数据损坏: %w", err)
 	}
-	imported := 0
+	res.TombstoneOnly = len(payload.Entries) == 0 && len(payload.Deleted) > 0
 	for _, e := range payload.Entries {
 		if v.getLocked(e.Name) {
+			res.Duplicates++
 			continue // 已存在则跳过
 		}
 		if err := validateEntry(e.Name, e.Secret, e.Algo); err != nil {
+			res.Invalid++
 			continue // 非法条目跳过
 		}
 		if e.Algo != AlgoHOTP {
@@ -545,14 +582,14 @@ func (v *Vault) Import(path, password string) (int, error) {
 		}
 		e.UpdatedAt = time.Now()
 		v.entries = append(v.entries, e)
-		imported++
+		res.Imported++
 	}
-	if imported > 0 {
+	if res.Imported > 0 {
 		if err := v.save(); err != nil {
-			return 0, err
+			return ImportResult{}, err
 		}
 	}
-	return imported, nil
+	return res, nil
 }
 
 // MergeResult 描述一次合并对本地保险库产生的变更数量。
@@ -588,9 +625,11 @@ func (v *Vault) MergeFrom(remoteEntries, remoteDeleted []Entry) (MergeResult, er
 	for _, e := range v.entries {
 		entries[e.Name] = e
 	}
-	tombs := make(map[string]time.Time, len(v.deleted))
+	// tombs 保留完整墓碑（含 LocalOnly 标记）：本地删除若不传播，
+	// 合并后仍须保持"仅本地删除"状态，不能被升级为可同步墓碑。
+	tombs := make(map[string]Entry, len(v.deleted))
 	for _, d := range v.deleted {
-		tombs[d.Name] = d.UpdatedAt
+		tombs[d.Name] = d
 	}
 
 	// 1. 远端条目并入本地
@@ -602,7 +641,7 @@ func (v *Vault) MergeFrom(remoteEntries, remoteDeleted []Entry) (MergeResult, er
 		switch {
 		case !exists:
 			if t, wasDeleted := tombs[re.Name]; wasDeleted {
-				if !re.UpdatedAt.After(t) {
+				if !re.UpdatedAt.After(t.UpdatedAt) {
 					continue // 墓碑不旧于条目：保持删除
 				}
 				delete(tombs, re.Name) // 条目比墓碑新：复活并清除过期墓碑
@@ -616,15 +655,16 @@ func (v *Vault) MergeFrom(remoteEntries, remoteDeleted []Entry) (MergeResult, er
 	}
 
 	// 2. 远端墓碑并入本地（旧于现存条目的墓碑已被条目本身否定，不记录，
-	//    避免墓碑集合随时间无限膨胀）
+	//    避免墓碑集合随时间无限膨胀）。远端墓碑一律视为可同步（LocalOnly=false）；
+	//    仅当本地较新的墓碑胜出时，才保留其 LocalOnly 标记。
 	for _, rd := range remoteDeleted {
 		if rd.Name == "" {
 			continue
 		}
 		lt, hasTomb := tombs[rd.Name]
 		le, exists := entries[rd.Name]
-		if (!hasTomb || rd.UpdatedAt.After(lt)) && (!exists || rd.UpdatedAt.After(le.UpdatedAt)) {
-			tombs[rd.Name] = rd.UpdatedAt
+		if (!hasTomb || rd.UpdatedAt.After(lt.UpdatedAt)) && (!exists || rd.UpdatedAt.After(le.UpdatedAt)) {
+			tombs[rd.Name] = Entry{Name: rd.Name, UpdatedAt: rd.UpdatedAt}
 		}
 		if exists && rd.UpdatedAt.After(le.UpdatedAt) {
 			delete(entries, rd.Name)
@@ -651,8 +691,8 @@ func (v *Vault) MergeFrom(remoteEntries, remoteDeleted []Entry) (MergeResult, er
 
 	// 4. 重建墓碑切片（按名称排序保证确定性）
 	outD := make([]Entry, 0, len(tombs))
-	for name, t := range tombs {
-		outD = append(outD, Entry{Name: name, UpdatedAt: t})
+	for name, d := range tombs {
+		outD = append(outD, Entry{Name: name, UpdatedAt: d.UpdatedAt, LocalOnly: d.LocalOnly})
 	}
 	sort.Slice(outD, func(i, j int) bool { return outD[i].Name < outD[j].Name })
 

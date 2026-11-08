@@ -151,8 +151,8 @@ func TestVaultExportImport(t *testing.T) {
 	defer v2.Close()
 
 	n, err := v2.Import(exportFile, "export-pwd")
-	if err != nil || n != 2 {
-		t.Fatalf("Import = %d, err=%v, 期望 2", n, err)
+	if err != nil || n.Imported != 2 {
+		t.Fatalf("Import = %+v, err=%v, 期望 2", n, err)
 	}
 	if _, err := v2.Get("Steam"); err != nil {
 		t.Errorf("导入后应能找到 Steam: %v", err)
@@ -160,8 +160,8 @@ func TestVaultExportImport(t *testing.T) {
 
 	// 再次导入：全部重名跳过
 	n, err = v2.Import(exportFile, "export-pwd")
-	if err != nil || n != 0 {
-		t.Fatalf("重复导入应跳过全部条目, got %d, err=%v", n, err)
+	if err != nil || n.Imported != 0 || n.Duplicates != 2 {
+		t.Fatalf("重复导入应跳过全部条目, got %+v, err=%v", n, err)
 	}
 
 	// 导出密码错误
@@ -194,8 +194,8 @@ func TestVaultExportSingle(t *testing.T) {
 	}
 	defer v2.Close()
 	n, err := v2.Import(exportFile, "p")
-	if err != nil || n != 1 {
-		t.Fatalf("单条导入 = %d, err=%v, 期望 1", n, err)
+	if err != nil || n.Imported != 1 {
+		t.Fatalf("单条导入 = %+v, err=%v, 期望 1", n, err)
 	}
 	if _, err := v2.Get("GitHub"); err == nil {
 		t.Error("不应导入未选择的 GitHub")
