@@ -6,6 +6,14 @@
 是 [TokenGuardian（Python 版）](https://github.com/Hellohistory/TokenGuardian) 的 Go 语言重写版。
 后端使用 Go + [Wails v2](https://wails.io)，界面遵循 **Material Design 3 Expressive (M3E)** 设计语言。
 
+## 🖼️ 界面预览
+
+| 亮色主题 | 暗色主题 |
+|:---:|:---:|
+| ![亮色主题](docs/screenshots/main-light.png) | ![暗色主题](docs/screenshots/main-dark.png) |
+
+<p align="center"><img src="docs/screenshots/dialog.png" width="496" alt="添加密钥对话框"/></p>
+
 ## ✨ 功能特性
 
 - **双算法支持**：TOTP（RFC 6238，基于时间）与 HOTP（RFC 4226，基于计数器），6 位验证码
