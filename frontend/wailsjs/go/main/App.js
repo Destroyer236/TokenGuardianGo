@@ -6,6 +6,10 @@ export function AddSecret(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['AddSecret'](arg1, arg2, arg3, arg4);
 }
 
+export function DisableSync() {
+  return window['go']['main']['App']['DisableSync']();
+}
+
 export function ExportSingle(arg1, arg2, arg3) {
   return window['go']['main']['App']['ExportSingle'](arg1, arg2, arg3);
 }
@@ -20,6 +24,14 @@ export function GetEntry(arg1) {
 
 export function GetSnapshot() {
   return window['go']['main']['App']['GetSnapshot']();
+}
+
+export function GetSyncRemoteInfo() {
+  return window['go']['main']['App']['GetSyncRemoteInfo']();
+}
+
+export function GetSyncSettings() {
+  return window['go']['main']['App']['GetSyncSettings']();
 }
 
 export function ImportVault(arg1, arg2) {
@@ -54,8 +66,20 @@ export function RemoveSecret(arg1) {
   return window['go']['main']['App']['RemoveSecret'](arg1);
 }
 
+export function SaveSyncSettings(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['SaveSyncSettings'](arg1, arg2, arg3, arg4, arg5);
+}
+
 export function SetPassword(arg1) {
   return window['go']['main']['App']['SetPassword'](arg1);
+}
+
+export function SyncNow() {
+  return window['go']['main']['App']['SyncNow']();
+}
+
+export function TestSyncConnection(arg1, arg2, arg3) {
+  return window['go']['main']['App']['TestSyncConnection'](arg1, arg2, arg3);
 }
 
 export function Unlock(arg1) {

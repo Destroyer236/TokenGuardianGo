@@ -581,6 +581,26 @@ input { font-family: inherit; color: inherit; }
 }
 
 .card-actions .spacer { flex: 1; }
+.dialog-actions .spacer { flex: 1; }
+
+/* ---------- 同步按钮旋转动画 ---------- */
+.icon-btn.spinning svg { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---------- 同步详情 ---------- */
+.sync-info-grid {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 10px 16px;
+    margin-top: 16px;
+    font-size: 14px;
+    line-height: 20px;
+    word-break: break-all;
+}
+
+.sync-info-label { color: var(--c-on-surface-variant); white-space: nowrap; }
+
+.sync-info-mono { font-family: "Cascadia Mono", Consolas, monospace; font-size: 13px; }
 
 /* ---------- 空状态 ---------- */
 .empty {
@@ -714,6 +734,7 @@ dialog[open] { animation: dialog-in var(--dur-medium) var(--ease-spatial); }
     box-shadow: var(--shadow-dialog);
     animation: snack-in var(--dur-medium) var(--ease-spatial);
     z-index: 100;
+    pointer-events: none; /* 纯文本提示：点击穿透到下层的对话框 */
 }
 
 @keyframes snack-in {

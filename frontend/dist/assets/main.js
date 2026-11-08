@@ -21,6 +21,7 @@ let editingName = null;    // null = 添加模式
 let pendingDeleteName = null;
 let exportTarget = null;   // null = 全部导出, 字符串 = 单条导出
 let importFilePath = null;
+let autoSyncTimer = null;  // WebDAV 防抖自动同步
 
 /* ---------- DOM 快捷 ---------- */
 const $ = (id) => document.getElementById(id);
@@ -30,13 +31,22 @@ let snackTimer = null;
 function snackbar(msg) {
     const el = $("snackbar");
     el.textContent = msg;
-    el.hidden = false;
+    el.hidden = false; // 回退路径（无 Popover API 时仍按原方式显示）
+    // 进入浏览器顶层显示，压过打开中的 <dialog>（含其遮罩）
+    if (el.showPopover) {
+        try { el.showPopover(); } catch (e) { /* 已在顶层时忽略 */ }
+    }
     // 重新触发进入动画
     el.style.animation = "none";
     void el.offsetWidth;
     el.style.animation = "";
     clearTimeout(snackTimer);
-    snackTimer = setTimeout(() => { el.hidden = true; }, 2600);
+    snackTimer = setTimeout(() => {
+        if (el.hidePopover) {
+            try { el.hidePopover(); } catch (e) { /* 未显示时忽略 */ }
+        }
+        el.hidden = true;
+    }, 2600);
 }
 
 /* ---------- 主题（跟随系统，可手动覆盖） ---------- */
@@ -316,6 +326,7 @@ async function hotpNext(card, name) {
         card.classList.add("flash");
         setTimeout(() => card.classList.remove("flash"), 400);
         await tick();
+        scheduleAutoSync();
     } catch (e) {
         snackbar(String(e).replace(/^Error:\s*/i, ""));
     }
@@ -390,6 +401,7 @@ async function saveEntry() {
         dlgEntry.close();
         await loadAndRender();
         await tick();
+        scheduleAutoSync();
     } catch (e) {
         fail(String(e).replace(/^Error:\s*/i, ""));
     }
@@ -403,27 +415,42 @@ $("fab").addEventListener("click", () => openEntryDialog(null));
 $("empty-add").addEventListener("click", () => openEntryDialog(null));
 
 /* ============================================================
-   删除确认对话框
+   通用确认对话框（删除密钥 / 停用同步等）
    ============================================================ */
 const dlgConfirm = $("dlg-confirm");
+let confirmAction = null; // 点击确认按钮后执行的回调
 
-function openConfirmDialog(name) {
-    pendingDeleteName = name;
-    $("confirm-body").textContent = `确定要删除密钥「${name}」吗？此操作无法撤销。`;
+// askConfirm 弹出通用确认框，action 在确认后执行
+function askConfirm(title, body, okLabel, action) {
+    $("confirm-title").textContent = title;
+    $("confirm-body").textContent = body;
+    $("confirm-ok").textContent = okLabel;
+    confirmAction = action;
     dlgConfirm.showModal();
 }
 
 $("confirm-ok").addEventListener("click", async () => {
-    try {
-        await app.RemoveSecret(pendingDeleteName);
-        snackbar(`已删除密钥：${pendingDeleteName}`);
-    } catch (e) {
-        snackbar(String(e).replace(/^Error:\s*/i, ""));
-    }
+    const action = confirmAction;
+    confirmAction = null;
     dlgConfirm.close();
-    await loadAndRender();
+    if (action) await action();
 });
 $("confirm-cancel").addEventListener("click", () => dlgConfirm.close());
+
+// openConfirmDialog 删除密钥的确认流程
+function openConfirmDialog(name) {
+    pendingDeleteName = name;
+    askConfirm("删除密钥？", `确定要删除密钥「${name}」吗？此操作无法撤销。`, "删除", async () => {
+        try {
+            await app.RemoveSecret(name);
+            snackbar(`已删除密钥：${name}`);
+        } catch (e) {
+            snackbar(String(e).replace(/^Error:\s*/i, ""));
+        }
+        await loadAndRender();
+        scheduleAutoSync();
+    });
+}
 
 /* ============================================================
    导出（全部 / 单条）
@@ -496,12 +523,232 @@ $("import-ok").addEventListener("click", async () => {
         snackbar(n > 0 ? `成功导入 ${n} 条密钥` : "没有新密钥可导入（全部重名或无效）");
         await loadAndRender();
         await tick();
+        scheduleAutoSync();
     } catch (e) {
         errEl.textContent = String(e).replace(/^Error:\s*/i, "");
         errEl.hidden = false;
     }
 });
 $("import-cancel").addEventListener("click", () => dlgImport.close());
+
+/* ============================================================
+   WebDAV 同步
+   ============================================================ */
+const dlgSync = $("dlg-sync");
+
+$("btn-sync").addEventListener("click", async () => {
+    let s;
+    try {
+        s = await app.GetSyncSettings();
+    } catch (e) {
+        snackbar(String(e).replace(/^Error:\s*/i, ""));
+        return;
+    }
+    if (s.configured) {
+        runSyncNow();
+    } else {
+        openSyncDialog();
+    }
+});
+
+function syncBtnBusy(busy) {
+    const btn = $("btn-sync");
+    btn.classList.toggle("spinning", busy);
+    btn.title = busy ? "同步中…" : "WebDAV 同步（点击立即同步 · 右键详情）";
+}
+
+async function runSyncNow() {
+    if ($("btn-sync").classList.contains("spinning")) return; // 已在同步中
+    syncBtnBusy(true);
+    try {
+        const r = await app.SyncNow();
+        const parts = [];
+        if (r.added) parts.push(`新增 ${r.added}`);
+        if (r.updated) parts.push(`更新 ${r.updated}`);
+        if (r.deleted) parts.push(`删除 ${r.deleted}`);
+        snackbar(parts.length ? `同步完成：${parts.join(" · ")}` : "已与云端一致");
+        await loadAndRender();
+        await tick();
+    } catch (e) {
+        snackbar(String(e).replace(/^Error:\s*/i, ""));
+    } finally {
+        syncBtnBusy(false);
+    }
+}
+
+// scheduleAutoSync 数据变更后防抖 2.5s 静默同步（失败仅记录在后端，不打扰用户）
+function scheduleAutoSync() {
+    clearTimeout(autoSyncTimer);
+    autoSyncTimer = setTimeout(async () => {
+        try {
+            const s = await app.GetSyncSettings();
+            if (!s.configured) return;
+            await app.SyncNow();
+            await loadAndRender();
+            await tick();
+        } catch (e) {
+            console.warn("自动同步失败:", e);
+        }
+    }, 2500);
+}
+
+async function openSyncDialog() {
+    let s;
+    try {
+        s = await app.GetSyncSettings();
+    } catch (e) {
+        s = {};
+    }
+    $("sync-last").textContent = s.lastSyncError
+        ? "上次同步失败：" + s.lastSyncError
+        : (s.lastSyncText ? "上次同步：" + s.lastSyncText : "尚未同步过");
+    $("sync-server").value = s.serverUrl || "";
+    $("sync-user").value = s.username || "";
+    $("sync-webdav-pwd").value = ""; // 不回传密码，留空 = 沿用已保存的值
+    $("sync-path").value = s.remotePath || "TokenGuardianGo/sync.enc";
+    $("sync-pwd").value = "";
+    $("sync-error").hidden = true;
+    dlgSync.showModal();
+    $("sync-server").focus();
+}
+
+function showSyncError(msg) {
+    const el = $("sync-error");
+    el.textContent = msg;
+    el.hidden = !msg;
+}
+
+async function testSyncConnection() {
+    const btn = $("sync-test");
+    const server = $("sync-server").value.trim();
+    if (!server) { showSyncError("请先填写服务器地址"); return; }
+    btn.disabled = true;
+    btn.textContent = "测试中…";
+    try {
+        await app.TestSyncConnection(server, $("sync-user").value.trim(), $("sync-webdav-pwd").value);
+        $("sync-error").hidden = true;
+        snackbar("连接成功");
+    } catch (e) {
+        showSyncError(String(e).replace(/^Error:\s*/i, ""));
+    } finally {
+        btn.disabled = false;
+        btn.textContent = "测试连接";
+    }
+}
+
+async function saveSyncSettings() {
+    const server = $("sync-server").value.trim();
+    if (!server) return showSyncError("服务器地址不能为空");
+
+    const btn = $("sync-save");
+    btn.disabled = true;
+    btn.textContent = "保存中…";
+    try {
+        await app.SaveSyncSettings(
+            server,
+            $("sync-user").value.trim(),
+            $("sync-webdav-pwd").value,
+            $("sync-path").value.trim(),
+            $("sync-pwd").value,
+        );
+        dlgSync.close();
+        snackbar("同步配置已保存");
+        await runSyncNow(); // 保存成功后立即推送一次
+    } catch (e) {
+        showSyncError(String(e).replace(/^Error:\s*/i, ""));
+    } finally {
+        btn.disabled = false;
+        btn.textContent = "保存并启用";
+    }
+}
+
+$("sync-test").addEventListener("click", testSyncConnection);
+$("sync-save").addEventListener("click", saveSyncSettings);
+$("sync-cancel").addEventListener("click", () => dlgSync.close());
+
+/* ---------- 同步详情（右键同步按钮打开） ---------- */
+const dlgSyncInfo = $("dlg-sync-info");
+
+$("btn-sync").addEventListener("contextmenu", (ev) => {
+    ev.preventDefault();
+    openSyncInfo();
+});
+
+function formatSize(bytes) {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+async function openSyncInfo() {
+    let s;
+    try {
+        s = await app.GetSyncSettings();
+    } catch (e) {
+        s = {};
+    }
+    $("sync-info-status").textContent = s.configured ? "已启用" : "未配置";
+    $("sync-info-server").textContent = s.serverUrl || "—";
+    $("sync-info-user").textContent = s.username || "（匿名）";
+    $("sync-info-path").textContent = s.remotePath || "—";
+
+    const last = [];
+    if (s.lastSyncAt) last.push(s.lastSyncAt);
+    if (s.lastSyncError) last.push("失败：" + s.lastSyncError);
+    else if (s.lastSyncText) last.push(s.lastSyncText);
+    $("sync-info-last").textContent = last.length ? last.join(" · ") : "尚未同步";
+
+    const errEl = $("sync-info-error");
+    errEl.hidden = true;
+    $("sync-info-remote").textContent = "查询中…";
+    dlgSyncInfo.showModal();
+
+    if (!s.configured) {
+        $("sync-info-remote").textContent = "—";
+        return;
+    }
+    try {
+        const r = await app.GetSyncRemoteInfo();
+        if (r.exists) {
+            const at = r.modTime ? new Date(r.modTime).toLocaleString() : "";
+            $("sync-info-remote").textContent =
+                `已存在 · ${formatSize(r.size)}` + (at ? ` · 服务器时间 ${at}` : "");
+        } else {
+            $("sync-info-remote").textContent = "尚未上传（首次同步时创建）";
+        }
+    } catch (e) {
+        $("sync-info-remote").textContent = "查询失败";
+        errEl.textContent = String(e).replace(/^Error:\s*/i, "");
+        errEl.hidden = false;
+    }
+}
+
+$("sync-info-sync").addEventListener("click", async () => {
+    dlgSyncInfo.close();
+    await runSyncNow();
+});
+
+$("sync-info-edit").addEventListener("click", () => {
+    dlgSyncInfo.close();
+    openSyncDialog(); // 预填当前配置，改服务器地址即可更换
+});
+
+// 停用同步：二次确认后删除本地配置（云端文件不受影响）
+$("sync-info-disable").addEventListener("click", () => {
+    askConfirm(
+        "停用 WebDAV 同步？",
+        "将删除本地保存的同步配置（含服务器地址与应用密码）。云端文件不受影响，可随时重新配置。",
+        "停用",
+        async () => {
+            try {
+                await app.DisableSync();
+                snackbar("已停用 WebDAV 同步");
+            } catch (e) {
+                snackbar(String(e).replace(/^Error:\s*/i, ""));
+            }
+        },
+    );
+});
 
 /* ---------- 锁定 / 搜索 / 点击遮罩关闭对话框 ---------- */
 $("btn-lock").addEventListener("click", backToGate);

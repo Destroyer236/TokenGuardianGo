@@ -44,6 +44,9 @@
                 <p class="topbar-sub" id="vault-stats">…</p>
             </div>
             <div class="topbar-actions">
+                <button class="icon-btn" id="btn-sync" title="WebDAV 同步（点击立即同步 · 右键详情）">
+                    <svg viewBox="0 0 24 24"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg>
+                </button>
                 <button class="icon-btn" id="btn-import" title="导入密钥（.enc）">
                     <svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
                 </button>
@@ -116,13 +119,36 @@
         </div>
     </dialog>
 
-    <!-- ============ 删除确认对话框 ============ -->
+    <!-- ============ 通用确认对话框（删除密钥 / 停用同步等） ============ -->
     <dialog class="m3-dialog m3-dialog-compact" id="dlg-confirm">
-        <h2 class="dialog-title">删除密钥？</h2>
-        <p class="dialog-body" id="confirm-body">确定要删除该密钥吗？此操作无法撤销。</p>
+        <h2 class="dialog-title" id="confirm-title">确认操作</h2>
+        <p class="dialog-body" id="confirm-body">确定要执行该操作吗？</p>
         <div class="dialog-actions">
             <button class="btn btn-text" id="confirm-cancel" type="button">取消</button>
-            <button class="btn btn-filled-danger" id="confirm-ok" type="button">删除</button>
+            <button class="btn btn-filled-danger" id="confirm-ok" type="button">确认</button>
+        </div>
+    </dialog>
+
+    <!-- ============ WebDAV 同步详情对话框（右键同步按钮打开） ============ -->
+    <dialog class="m3-dialog" id="dlg-sync-info">
+        <h2 class="dialog-title">同步详情</h2>
+
+        <div class="sync-info-grid">
+            <span class="sync-info-label">状态</span><span id="sync-info-status"></span>
+            <span class="sync-info-label">服务器</span><span class="sync-info-mono" id="sync-info-server"></span>
+            <span class="sync-info-label">账号</span><span id="sync-info-user"></span>
+            <span class="sync-info-label">远端文件</span><span class="sync-info-mono" id="sync-info-path"></span>
+            <span class="sync-info-label">云端状态</span><span id="sync-info-remote"></span>
+            <span class="sync-info-label">上次同步</span><span id="sync-info-last"></span>
+        </div>
+
+        <p class="dialog-error" hidden id="sync-info-error" role="alert"></p>
+
+        <div class="dialog-actions">
+            <button class="btn btn-text icon-btn-danger" id="sync-info-disable" type="button">停用同步</button>
+            <span class="spacer"></span>
+            <button class="btn btn-outlined" id="sync-info-edit" type="button">更改配置</button>
+            <button class="btn btn-filled" id="sync-info-sync" type="button">立即同步</button>
         </div>
     </dialog>
 
@@ -156,8 +182,45 @@
         </div>
     </dialog>
 
-    <!-- ============ Snackbar ============ -->
-    <div class="snackbar" hidden id="snackbar" role="status"></div>
+    <!-- ============ WebDAV 同步设置对话框 ============ -->
+    <dialog class="m3-dialog" id="dlg-sync">
+        <h2 class="dialog-title">WebDAV 同步</h2>
+        <p class="dialog-body" id="sync-last"></p>
+
+        <div class="field">
+            <input id="sync-server" placeholder=" " spellcheck="false" type="text"/>
+            <label for="sync-server">服务器地址</label>
+        </div>
+        <div class="field">
+            <input autocomplete="off" id="sync-user" placeholder=" " spellcheck="false" type="text"/>
+            <label for="sync-user">账号（可留空）</label>
+        </div>
+        <div class="field">
+            <input autocomplete="new-password" id="sync-webdav-pwd" placeholder=" " type="password"/>
+            <label for="sync-webdav-pwd">应用密码（留空 = 沿用已保存）</label>
+        </div>
+        <div class="field">
+            <input id="sync-path" placeholder=" " spellcheck="false" type="text"/>
+            <label for="sync-path">远端文件路径</label>
+        </div>
+        <div class="field">
+            <input autocomplete="new-password" id="sync-pwd" placeholder=" " type="password"/>
+            <label for="sync-pwd">同步密码（加密同步文件，留空 = 沿用）</label>
+        </div>
+
+        <p class="dialog-body">应用密码请在网盘后台生成（坚果云：网页端 → 账户信息 → 安全选项 → 添加应用密码）。同步文件全程加密，云端只见密文。</p>
+        <p class="dialog-error" hidden id="sync-error" role="alert"></p>
+
+        <div class="dialog-actions">
+            <button class="btn btn-outlined" id="sync-test" type="button">测试连接</button>
+            <span class="spacer"></span>
+            <button class="btn btn-text" id="sync-cancel" type="button">取消</button>
+            <button class="btn btn-filled" id="sync-save" type="button">保存并启用</button>
+        </div>
+    </dialog>
+
+    <!-- ============ Snackbar（popover="manual" 使其进入浏览器顶层，不被打开中的 <dialog> 遮挡） ============ -->
+    <div class="snackbar" popover="manual" hidden id="snackbar" role="status"></div>
 
     <script src="./assets/main.js"></script>
 </body>
