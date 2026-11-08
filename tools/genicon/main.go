@@ -4,8 +4,9 @@
 // 盾牌中央镂空钥匙孔（守护 + 密码隐喻）。4x 超采样抗锯齿。
 //
 // 输出:
-//   build/appicon.png        1024x1024（Wails 源图标）
-//   build/windows/icon.ico   多尺寸 ICO（256/128/64/48/32/16）
+//
+//	build/appicon.png        1024x1024（Wails 源图标）
+//	build/windows/icon.ico   多尺寸 ICO（256/128/64/48/32/16）
 package main
 
 import (
@@ -20,8 +21,8 @@ import (
 )
 
 const (
-	size     = 1024 // 逻辑画布
-	supersam = 4    // 超采样倍数
+	size     = 1024  // 逻辑画布
+	supersam = 4     // 超采样倍数
 	tileRad  = 232.0 // 贴片圆角
 )
 
@@ -204,7 +205,7 @@ func main() {
 	shield := shieldPath()
 	stem := stemPath()
 	const (
-		circCX, circCY, circR = 512.0, 452.0, 88.0 // 钥匙孔圆
+		circCX, circCY, circR  = 512.0, 452.0, 88.0        // 钥匙孔圆
 		shCX, shCY, shRX, shRY = 512.0, 880.0, 300.0, 46.0 // 投影椭圆
 	)
 
@@ -339,7 +340,7 @@ func saveICO(base *image.RGBA, path string) error {
 		} else {
 			e[0], e[1] = byte(s), byte(s)
 		}
-		e[2], e[3] = 0, 0   // 调色板数 / 保留
+		e[2], e[3] = 0, 0                        // 调色板数 / 保留
 		binary.LittleEndian.PutUint16(e[4:], 1)  // planes
 		binary.LittleEndian.PutUint16(e[6:], 32) // bpp
 		binary.LittleEndian.PutUint32(e[8:], uint32(len(entries[i])))

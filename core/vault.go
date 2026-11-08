@@ -77,13 +77,15 @@ type Vault struct {
 	entries []Entry
 }
 
-// DefaultVaultPath 返回默认保险库路径：%AppData%/TokenGuardian/vault.enc
+// DefaultVaultPath 返回默认保险库路径：程序所在目录下的 vault.enc（Windows 隐藏属性）。
+// 便携式设计：删除该文件即可重置主密码、重新开始。
 func DefaultVaultPath() (string, error) {
-	dir, err := os.UserConfigDir()
+	exe, err := os.Executable()
 	if err != nil {
-		return "", err
+		// 取不到可执行文件路径时退回工作目录
+		return "vault.enc", nil
 	}
-	return filepath.Join(dir, "TokenGuardian", "vault.enc"), nil
+	return filepath.Join(filepath.Dir(exe), "vault.enc"), nil
 }
 
 // VaultFileExists 判断指定路径是否已存在保险库文件。
@@ -228,7 +230,12 @@ func (v *Vault) save() error {
 	if err != nil {
 		return err
 	}
-	return writeVaultFile(v.path, blob)
+	if err := writeVaultFile(v.path, blob); err != nil {
+		return err
+	}
+	// 原子替换产生的新文件会丢失隐藏属性，每次保存后重新标记
+	_ = markHidden(v.path)
+	return nil
 }
 
 // Close 锁定保险库：清零并释放内存中的密钥与明细。

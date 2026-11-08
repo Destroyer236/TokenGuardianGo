@@ -43,7 +43,7 @@ func decodeSecret(secret string) ([]byte, error) {
 // dynamicTruncate 实现 RFC 4226 的动态截断，返回 digits 位整数。
 func dynamicTruncate(mac []byte, digits int) int {
 	offset := mac[len(mac)-1] & 0x0F
-	code := binary.BigEndian.Uint32(mac[offset : offset+4]) & 0x7FFFFFFF
+	code := binary.BigEndian.Uint32(mac[offset:offset+4]) & 0x7FFFFFFF
 	mod := uint32(1)
 	for i := 0; i < digits; i++ {
 		mod *= 10

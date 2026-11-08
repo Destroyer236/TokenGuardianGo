@@ -57,8 +57,8 @@ func TestGenerateTOTPRFC6238(t *testing.T) {
 // （对应 Python 版 _correct_padding 修复）。
 func TestBase32PaddingEquivalent(t *testing.T) {
 	at := time.Unix(59, 0)
-	withPad, _ := GenerateTOTP("MFRGG===", DefaultInterval, at)   // "abc"
-	noPad, err := GenerateTOTP("MFRGG", DefaultInterval, at)        // 同一密钥，缺填充
+	withPad, _ := GenerateTOTP("MFRGG===", DefaultInterval, at) // "abc"
+	noPad, err := GenerateTOTP("MFRGG", DefaultInterval, at)    // 同一密钥，缺填充
 	if err != nil {
 		t.Fatalf("缺填充密钥应能解码: %v", err)
 	}
