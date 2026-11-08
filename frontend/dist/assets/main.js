@@ -448,7 +448,7 @@ $("export-ok").addEventListener("click", async () => {
     errEl.hidden = true;
     if (!pwd) { errEl.textContent = "请输入导出文件密码"; errEl.hidden = false; return; }
 
-    const path = app.PickSaveFile("选择导出位置", "TokenGuardian-export.enc");
+    const path = await app.PickSaveFile("选择导出位置", "TokenGuardian-export.enc");
     if (!path) return; // 用户取消
 
     try {
@@ -474,7 +474,7 @@ $("btn-export").addEventListener("click", () => openExportDialog(null));
 const dlgImport = $("dlg-import");
 
 $("btn-import").addEventListener("click", async () => {
-    const path = app.PickOpenFile("选择要导入的加密文件");
+    const path = await app.PickOpenFile("选择要导入的加密文件");
     if (!path) return;
     importFilePath = path;
     $("import-file").textContent = "已选择文件：" + path.split(/[\\/]/).pop();
